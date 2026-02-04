@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jay's blog</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar" aria-label="Blog sidebar">
+      <section id="treeSection" class="sidebar-section">
+        <div id="fileTree" class="scroll-region" aria-label="Notes tree"></div>
+      </section>
+
+      <div id="sectionResizer" aria-hidden="true"></div>
+
+      <section id="outlineSection" class="sidebar-section">
+        <div id="outline" class="scroll-region" aria-label="Current note outline"></div>
+      </section>
+
+      <div id="sidebarResizer" aria-hidden="true"></div>
+    </aside>
+
+    <main id="mainContent">
+      <article id="noteContent" aria-live="polite"></article>
+    </main>
+  </div>
+
+  <button
+    id="sidebarToggle"
+    type="button"
+    aria-controls="sidebar"
+    aria-expanded="true"
+    aria-label="Hide sidebar"
+    title="Hide sidebar"
+  >
+    <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+  </button>
+
+  <script src="app.js"></script>
+</body>
+</html>
