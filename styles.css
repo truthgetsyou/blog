@@ -343,6 +343,14 @@ body {
   padding: 0 2px;
 }
 
+.custom-note-frame {
+  width: 100%;
+  min-height: 72vh;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 #noteContent h1,
 #noteContent h2,
 #noteContent h3,

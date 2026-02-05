@@ -66,6 +66,10 @@ function uniqueSorted(paths) {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b));
 }
 
+function isCustomHtmlNote(path) {
+  return /\.html?$/i.test(path);
+}
+
 function renderInline(text) {
   let html = escapeHtml(text);
   const codeTokens = [];
@@ -350,7 +354,7 @@ function renderTree(paths) {
     const fileIcon = document.createElement("i");
     fileIcon.className = "bi bi-dash-lg";
     button.appendChild(fileIcon);
-    button.appendChild(document.createTextNode(file.name.replace(/\.md$/i, "")));
+    button.appendChild(document.createTextNode(file.name.replace(/\.(md|html?)$/i, "")));
     if (file.path === state.currentNote) {
       button.classList.add("active");
     }
@@ -544,6 +548,13 @@ async function openNote(path, historyMode = "push") {
   outline.innerHTML = "";
 
   const noteUrl = getNoteUrl(path);
+  if (isCustomHtmlNote(path)) {
+    noteContent.innerHTML =
+      `<iframe class="custom-note-frame" src="${noteUrl}" title="${path}" loading="lazy"></iframe>`;
+    outline.innerHTML = '<p class="muted">Outline unavailable.</p>';
+    return;
+  }
+
   const response = await fetch(noteUrl);
   if (!response.ok) {
     noteContent.innerHTML = "<p>Could not load that note.</p>";
@@ -573,7 +584,7 @@ async function loadNotesFromGitHub() {
           return (
             item.type === "blob" &&
             item.path.startsWith(`${CONFIG.contentRoot}/`) &&
-            item.path.endsWith(".md")
+            (item.path.endsWith(".md") || item.path.endsWith(".html") || item.path.endsWith(".htm"))
           );
         })
         .map((item) => item.path);
@@ -594,6 +605,7 @@ async function loadLocalFallbackNotes() {
   const candidates = uniqueSorted([
     requested || "",
     ...LOCAL_EXAMPLE_NOTES,
+    `${CONFIG.contentRoot}/experimental/clock.html`,
     `${CONFIG.contentRoot}/index.md`
   ]).filter(Boolean);
 
@@ -762,13 +774,14 @@ async function init() {
   fileTree.innerHTML = '<p class="muted">Loading notes...</p>';
   noteContent.innerHTML = '<p class="muted">Loading...</p>';
 
-  state.allNotes = await loadNotesFromGitHub();
-  if (!state.allNotes.length) {
-    state.allNotes = await loadLocalFallbackNotes();
-  }
+  const [githubNotes, localNotes] = await Promise.all([
+    loadNotesFromGitHub(),
+    loadLocalFallbackNotes()
+  ]);
+  state.allNotes = uniqueSorted([...githubNotes, ...localNotes]);
 
   if (!state.allNotes.length) {
-    fileTree.innerHTML = `<p class="muted">No markdown notes found in ${CONFIG.contentRoot}/.</p>`;
+    fileTree.innerHTML = `<p class="muted">No notes found in ${CONFIG.contentRoot}/.</p>`;
     noteContent.innerHTML = `<p>Add your first note in <code>${CONFIG.contentRoot}/</code> to get started.</p>`;
     outline.innerHTML = "";
     return;
