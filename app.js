@@ -67,6 +67,23 @@ function uniqueSorted(paths) {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b));
 }
 
+function getAllFolderPaths(paths) {
+  const folders = new Set();
+  for (const fullPath of paths) {
+    if (!fullPath.startsWith(`${CONFIG.contentRoot}/`)) {
+      continue;
+    }
+    const relative = fullPath.slice(CONFIG.contentRoot.length + 1);
+    const parts = relative.split("/");
+    let folderPath = "";
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      folderPath = folderPath ? `${folderPath}/${parts[index]}` : parts[index];
+      folders.add(folderPath);
+    }
+  }
+  return folders;
+}
+
 function isCustomHtmlNote(path) {
   return /\.html?$/i.test(path);
 }
@@ -875,6 +892,10 @@ async function init() {
     noteContent.innerHTML = `<p>Add your first note in <code>${CONFIG.contentRoot}/</code> to get started.</p>`;
     outline.innerHTML = "";
     return;
+  }
+
+  if (!state.closedFolders.size) {
+    state.closedFolders = getAllFolderPaths(state.allNotes);
   }
 
   const firstNote = getRequestedNote(state.allNotes);
