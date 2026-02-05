@@ -18,16 +18,28 @@ const LOCAL_EXAMPLE_NOTES = [
 const sidebar = document.getElementById("sidebar");
 const sidebarResizer = document.getElementById("sidebarResizer");
 const sectionResizer = document.getElementById("sectionResizer");
+const navBack = document.getElementById("navBack");
+const navForward = document.getElementById("navForward");
 const sidebarToggle = document.getElementById("sidebarToggle");
+const themeToggle = document.getElementById("themeToggle");
+const buttonBar = document.getElementById("buttonBar");
 const treeSection = document.getElementById("treeSection");
 const fileTree = document.getElementById("fileTree");
 const outline = document.getElementById("outline");
 const noteContent = document.getElementById("noteContent");
+const themeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+let themePreference = localStorage.getItem("themePreference");
+if (themePreference !== "light" && themePreference !== "dark") {
+  themePreference = null;
+}
 
 const state = {
   allNotes: [],
   currentNote: "",
-  closedFolders: new Set()
+  closedFolders: new Set(),
+  collapsedOutlineGroups: new Set(),
+  noteHistory: [],
+  noteHistoryIndex: -1
 };
 
 function clamp(value, min, max) {
@@ -184,6 +196,18 @@ function renderMarkdown(markdown) {
   return html;
 }
 
+function createOutlineLink(heading, levelClass) {
+  const link = document.createElement("a");
+  link.className = `outline-link ${levelClass}`;
+  link.href = `#${heading.id}`;
+  link.textContent = heading.textContent;
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    heading.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  return link;
+}
+
 function updateOutline() {
   outline.innerHTML = "";
   const headings = Array.from(noteContent.querySelectorAll("h2, h3"));
@@ -197,29 +221,94 @@ function updateOutline() {
   }
 
   const slugCounts = new Map();
-  const list = document.createElement("ul");
-  list.className = "outline-list";
+  const groups = [];
+  let currentGroup = null;
 
   for (const heading of headings) {
     const base = slugify(heading.textContent) || "section";
     const count = slugCounts.get(base) || 0;
     slugCounts.set(base, count + 1);
-    const id = count === 0 ? base : `${base}-${count}`;
-    heading.id = id;
+    heading.id = count === 0 ? base : `${base}-${count}`;
 
-    const item = document.createElement("li");
-    item.className = `outline-item ${heading.tagName === "H3" ? "level-3" : "level-2"}`;
+    if (heading.tagName === "H2") {
+      currentGroup = { heading, children: [] };
+      groups.push(currentGroup);
+      continue;
+    }
 
-    const link = document.createElement("a");
-    link.href = `#${id}`;
-    link.textContent = heading.textContent;
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      heading.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    if (currentGroup) {
+      currentGroup.children.push(heading);
+    } else {
+      groups.push({ heading: null, children: [heading] });
+    }
+  }
 
-    item.appendChild(link);
-    list.appendChild(item);
+  const list = document.createElement("ul");
+  list.className = "outline-list";
+
+  for (const group of groups) {
+    if (group.heading) {
+      const groupId = group.heading.id;
+      const item = document.createElement("li");
+      item.className = "outline-group";
+      const collapsed = state.collapsedOutlineGroups.has(groupId);
+      if (collapsed) {
+        item.classList.add("collapsed");
+      }
+
+      const row = document.createElement("div");
+      row.className = "outline-group-row";
+
+      const caret = document.createElement("button");
+      caret.type = "button";
+      caret.className = "outline-caret";
+      caret.setAttribute("aria-label", `Toggle ${group.heading.textContent}`);
+      caret.setAttribute("aria-expanded", String(!collapsed));
+      const h2Icon = document.createElement("i");
+      h2Icon.className = "bi bi-dash-lg outline-h2-icon";
+      caret.appendChild(h2Icon);
+      caret.addEventListener("click", () => {
+        const nextCollapsed = !item.classList.contains("collapsed");
+        item.classList.toggle("collapsed", nextCollapsed);
+        caret.setAttribute("aria-expanded", String(!nextCollapsed));
+        if (nextCollapsed) {
+          state.collapsedOutlineGroups.add(groupId);
+        } else {
+          state.collapsedOutlineGroups.delete(groupId);
+        }
+      });
+
+      row.appendChild(caret);
+      row.appendChild(createOutlineLink(group.heading, "level-2"));
+      item.appendChild(row);
+
+      const sublist = document.createElement("ul");
+      sublist.className = "outline-sublist";
+      for (const child of group.children) {
+        const childItem = document.createElement("li");
+        childItem.className = "outline-item";
+        const childLink = createOutlineLink(child, "level-3");
+        const childIcon = document.createElement("i");
+        childIcon.className = "bi bi-dot outline-h3-icon";
+        childLink.prepend(childIcon);
+        childItem.appendChild(childLink);
+        sublist.appendChild(childItem);
+      }
+      item.appendChild(sublist);
+      list.appendChild(item);
+      continue;
+    }
+
+    for (const child of group.children) {
+      const childItem = document.createElement("li");
+      childItem.className = "outline-item";
+      const childLink = createOutlineLink(child, "level-3");
+      const childIcon = document.createElement("i");
+      childIcon.className = "bi bi-dot outline-h3-icon";
+      childLink.prepend(childIcon);
+      childItem.appendChild(childLink);
+      list.appendChild(childItem);
+    }
   }
 
   outline.appendChild(list);
@@ -251,6 +340,27 @@ function createTree(paths) {
 function renderTree(paths) {
   fileTree.innerHTML = "";
   const tree = createTree(paths);
+  const welcomePath = `${CONFIG.contentRoot}/welcome.md`;
+
+  function renderFileButton(file, mountPoint) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tree-file";
+    button.dataset.path = file.path;
+    const fileIcon = document.createElement("i");
+    fileIcon.className = "bi bi-dash-lg";
+    button.appendChild(fileIcon);
+    button.appendChild(document.createTextNode(file.name.replace(/\.md$/i, "")));
+    if (file.path === state.currentNote) {
+      button.classList.add("active");
+    }
+
+    button.addEventListener("click", () => {
+      openNote(file.path);
+    });
+
+    mountPoint.appendChild(button);
+  }
 
   function renderNode(node, mountPoint, parentPath = "") {
     const folderNames = Array.from(node.dirs.keys()).sort((a, b) => a.localeCompare(b));
@@ -284,23 +394,7 @@ function renderTree(paths) {
 
     const sortedFiles = node.files.sort((a, b) => a.name.localeCompare(b.name));
     for (const file of sortedFiles) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "tree-file";
-      button.dataset.path = file.path;
-      const fileIcon = document.createElement("i");
-      fileIcon.className = "bi bi-file-earmark-text";
-      button.appendChild(fileIcon);
-      button.appendChild(document.createTextNode(file.name.replace(/\.md$/i, "")));
-      if (file.path === state.currentNote) {
-        button.classList.add("active");
-      }
-
-      button.addEventListener("click", () => {
-        openNote(file.path);
-      });
-
-      mountPoint.appendChild(button);
+      renderFileButton(file, mountPoint);
     }
   }
 
@@ -309,15 +403,28 @@ function renderTree(paths) {
   root.open = true;
 
   const rootSummary = document.createElement("summary");
-  const rootChevron = document.createElement("i");
-  rootChevron.className = "bi bi-chevron-right tree-chevron";
-  rootSummary.appendChild(rootChevron);
   rootSummary.appendChild(document.createTextNode("Jay's blog"));
+  rootSummary.addEventListener("click", (event) => {
+    event.preventDefault();
+    const targetPath = state.allNotes.includes(welcomePath) ? welcomePath : state.allNotes[0];
+    if (targetPath) {
+      openNote(targetPath);
+    }
+  });
   root.appendChild(rootSummary);
+  root.addEventListener("toggle", () => {
+    root.open = true;
+  });
 
   const rootChildren = document.createElement("div");
   rootChildren.className = "tree-children";
-  renderNode(tree, rootChildren);
+  renderNode(
+    {
+      dirs: tree.dirs,
+      files: tree.files.filter((file) => file.path !== welcomePath)
+    },
+    rootChildren
+  );
   root.appendChild(rootChildren);
 
   fileTree.appendChild(root);
@@ -336,7 +443,7 @@ function getNoteUrl(path) {
 
 function setSidebarWidth(width, persist = true) {
   const max = Math.floor(window.innerWidth * 0.7);
-  const next = clamp(width, 220, max);
+  const next = Math.round(clamp(width, 220, max));
   document.documentElement.style.setProperty("--sidebar-width", `${next}px`);
   if (persist) {
     localStorage.setItem("sidebarWidth", String(next));
@@ -362,8 +469,43 @@ function setTreeSectionHeight(height, persist = true, bounds = null) {
   return next;
 }
 
+function getResolvedTheme() {
+  return themePreference || (themeQuery.matches ? "dark" : "light");
+}
+
+function applyTheme() {
+  const theme = getResolvedTheme();
+  const nextTheme = theme === "dark" ? "light" : "dark";
+
+  document.documentElement.dataset.theme = theme;
+  themeToggle.setAttribute("aria-label", `Switch to ${nextTheme} mode`);
+  themeToggle.title = `Switch to ${nextTheme} mode`;
+  themeToggle.querySelector("i").className = theme === "dark" ? "bi bi-sun" : "bi bi-moon-stars";
+}
+
+function setupTheme() {
+  applyTheme();
+
+  themeToggle.addEventListener("click", () => {
+    themePreference = getResolvedTheme() === "dark" ? "light" : "dark";
+    localStorage.setItem("themePreference", themePreference);
+    applyTheme();
+  });
+
+  themeQuery.addEventListener("change", () => {
+    if (!themePreference) {
+      applyTheme();
+    }
+  });
+}
+
 function setSidebarHidden(hidden) {
   document.body.classList.toggle("sidebar-hidden", hidden);
+  if (hidden) {
+    document.body.classList.add("show-hidden-bar");
+  } else {
+    document.body.classList.remove("show-hidden-bar");
+  }
   sidebarToggle.setAttribute("aria-expanded", String(!hidden));
   sidebarToggle.setAttribute("aria-label", hidden ? "Show sidebar" : "Hide sidebar");
   sidebarToggle.title = hidden ? "Show sidebar" : "Hide sidebar";
@@ -373,12 +515,30 @@ function setSidebarHidden(hidden) {
 function updateNoteInUrl(path) {
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set("note", path);
-  window.history.replaceState({}, "", nextUrl);
+  window.history.replaceState({ note: path }, "", nextUrl);
 }
 
-async function openNote(path) {
+function updateNavigationButtons() {
+  navBack.disabled = state.noteHistoryIndex <= 0;
+  navForward.disabled = state.noteHistoryIndex >= state.noteHistory.length - 1;
+}
+
+async function openNote(path, historyMode = "push") {
+  if (historyMode === "replace") {
+    state.noteHistory = [path];
+    state.noteHistoryIndex = 0;
+  } else if (historyMode === "push") {
+    const currentPath = state.noteHistory[state.noteHistoryIndex];
+    if (currentPath !== path) {
+      state.noteHistory = state.noteHistory.slice(0, state.noteHistoryIndex + 1);
+      state.noteHistory.push(path);
+      state.noteHistoryIndex = state.noteHistory.length - 1;
+    }
+  }
+
   state.currentNote = path;
   updateNoteInUrl(path);
+  updateNavigationButtons();
   renderTree(state.allNotes);
   noteContent.innerHTML = '<p class="muted">Loading note...</p>';
   outline.innerHTML = "";
@@ -528,10 +688,49 @@ function setupToggle() {
   });
 }
 
+function setupNavigationButtons() {
+  navBack.addEventListener("click", () => {
+    if (state.noteHistoryIndex <= 0) {
+      return;
+    }
+    state.noteHistoryIndex -= 1;
+    openNote(state.noteHistory[state.noteHistoryIndex], "none");
+  });
+  navForward.addEventListener("click", () => {
+    if (state.noteHistoryIndex >= state.noteHistory.length - 1) {
+      return;
+    }
+    state.noteHistoryIndex += 1;
+    openNote(state.noteHistory[state.noteHistoryIndex], "none");
+  });
+  updateNavigationButtons();
+}
+
+function setupHiddenButtonBarReveal() {
+  document.addEventListener("mousemove", (event) => {
+    if (!document.body.classList.contains("sidebar-hidden")) {
+      return;
+    }
+    const rect = buttonBar.getBoundingClientRect();
+    const revealPadding = 6;
+    const nearHorizontal =
+      event.clientX >= rect.left - revealPadding &&
+      event.clientX <= rect.right + revealPadding;
+    const nearVertical =
+      event.clientY >= rect.top - revealPadding &&
+      event.clientY <= rect.bottom + revealPadding;
+    document.body.classList.toggle("show-hidden-bar", nearHorizontal && nearVertical);
+  });
+}
+
 function getRequestedNote(paths) {
+  const welcomePath = `${CONFIG.contentRoot}/welcome.md`;
   const requested = new URLSearchParams(window.location.search).get("note");
   if (requested && paths.includes(requested)) {
     return requested;
+  }
+  if (paths.includes(welcomePath)) {
+    return welcomePath;
   }
   return paths[0];
 }
@@ -551,8 +750,11 @@ function handleResize() {
 }
 
 async function init() {
+  setupTheme();
   setupLayoutFromStorage();
   setupToggle();
+  setupNavigationButtons();
+  setupHiddenButtonBarReveal();
   bindSidebarResizer();
   bindSectionResizer();
   window.addEventListener("resize", handleResize);
@@ -573,7 +775,7 @@ async function init() {
   }
 
   const firstNote = getRequestedNote(state.allNotes);
-  await openNote(firstNote);
+  await openNote(firstNote, "replace");
 
   const savedTreeHeight = Number(localStorage.getItem("treeHeight"));
   if (!savedTreeHeight) {

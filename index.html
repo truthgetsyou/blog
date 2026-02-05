@@ -28,16 +28,42 @@
     </main>
   </div>
 
-  <button
-    id="sidebarToggle"
-    type="button"
-    aria-controls="sidebar"
-    aria-expanded="true"
-    aria-label="Hide sidebar"
-    title="Hide sidebar"
-  >
-    <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
-  </button>
+  <div id="buttonBar" role="group" aria-label="Sidebar, theme, and navigation controls">
+    <button
+      id="sidebarToggle"
+      type="button"
+      aria-controls="sidebar"
+      aria-expanded="true"
+      aria-label="Hide sidebar"
+      title="Hide sidebar"
+    >
+      <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+    </button>
+    <button
+      id="themeToggle"
+      type="button"
+      aria-label="Switch to dark mode"
+      title="Switch to dark mode"
+    >
+      <i class="bi bi-moon-stars" aria-hidden="true"></i>
+    </button>
+    <button
+      id="navBack"
+      type="button"
+      aria-label="Go back"
+      title="Go back"
+    >
+      <i class="bi bi-arrow-left" aria-hidden="true"></i>
+    </button>
+    <button
+      id="navForward"
+      type="button"
+      aria-label="Go forward"
+      title="Go forward"
+    >
+      <i class="bi bi-arrow-right" aria-hidden="true"></i>
+    </button>
+  </div>
 
   <script src="app.js"></script>
 </body>
