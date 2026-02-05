@@ -20,6 +20,7 @@ const sidebarResizer = document.getElementById("sidebarResizer");
 const sectionResizer = document.getElementById("sectionResizer");
 const navBack = document.getElementById("navBack");
 const navForward = document.getElementById("navForward");
+const navHome = document.getElementById("navHome");
 const sidebarToggle = document.getElementById("sidebarToggle");
 const themeToggle = document.getElementById("themeToggle");
 const buttonBar = document.getElementById("buttonBar");
@@ -701,6 +702,13 @@ function setupToggle() {
 }
 
 function setupNavigationButtons() {
+  navHome.addEventListener("click", () => {
+    const welcomePath = `${CONFIG.contentRoot}/welcome.md`;
+    const targetPath = state.allNotes.includes(welcomePath) ? welcomePath : state.allNotes[0];
+    if (targetPath) {
+      openNote(targetPath);
+    }
+  });
   navBack.addEventListener("click", () => {
     if (state.noteHistoryIndex <= 0) {
       return;
