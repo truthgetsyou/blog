@@ -71,6 +71,10 @@ function isCustomHtmlNote(path) {
   return /\.html?$/i.test(path);
 }
 
+function isSupportedNote(path) {
+  return /\.(md|html?)$/i.test(path);
+}
+
 function renderInline(text) {
   let html = escapeHtml(text);
   const codeTokens = [];
@@ -585,7 +589,7 @@ async function loadNotesFromGitHub() {
           return (
             item.type === "blob" &&
             item.path.startsWith(`${CONFIG.contentRoot}/`) &&
-            (item.path.endsWith(".md") || item.path.endsWith(".html") || item.path.endsWith(".htm"))
+            isSupportedNote(item.path)
           );
         })
         .map((item) => item.path);
@@ -599,6 +603,82 @@ async function loadNotesFromGitHub() {
   }
 
   return [];
+}
+
+async function loadNotesFromIndexFile() {
+  try {
+    const response = await fetch(getNoteUrl(`${CONFIG.contentRoot}/.notes-index.json`));
+    if (!response.ok) {
+      return [];
+    }
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return uniqueSorted(data.filter((path) => typeof path === "string" && isSupportedNote(path)));
+  } catch (error) {
+    return [];
+  }
+}
+
+async function loadNotesFromDirectoryListing() {
+  const notes = [];
+  const visited = new Set();
+
+  async function walk(dirPath) {
+    if (visited.has(dirPath)) {
+      return;
+    }
+    visited.add(dirPath);
+
+    try {
+      const response = await fetch(getNoteUrl(dirPath));
+      if (!response.ok) {
+        return;
+      }
+
+      const html = await response.text();
+      if (!html.includes("<a")) {
+        return;
+      }
+
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const links = Array.from(doc.querySelectorAll("a[href]"));
+
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (!href || href === "../" || href.startsWith("?") || href.startsWith("#")) {
+          continue;
+        }
+
+        const absolute = new URL(href, getNoteUrl(dirPath));
+        const path = decodeURIComponent(absolute.pathname);
+        const basePath = getBasePath();
+        if (!path.startsWith(basePath)) {
+          continue;
+        }
+
+        const relativePath = path.slice(basePath.length);
+        if (!relativePath.startsWith(`${CONFIG.contentRoot}/`)) {
+          continue;
+        }
+
+        if (relativePath.endsWith("/")) {
+          await walk(relativePath);
+          continue;
+        }
+
+        if (isSupportedNote(relativePath)) {
+          notes.push(relativePath);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  await walk(`${CONFIG.contentRoot}/`);
+  return uniqueSorted(notes);
 }
 
 async function loadLocalFallbackNotes() {
@@ -782,11 +862,13 @@ async function init() {
   fileTree.innerHTML = '<p class="muted">Loading notes...</p>';
   noteContent.innerHTML = '<p class="muted">Loading...</p>';
 
-  const [githubNotes, localNotes] = await Promise.all([
+  const [indexNotes, githubNotes, directoryNotes, localNotes] = await Promise.all([
+    loadNotesFromIndexFile(),
     loadNotesFromGitHub(),
+    loadNotesFromDirectoryListing(),
     loadLocalFallbackNotes()
   ]);
-  state.allNotes = uniqueSorted([...githubNotes, ...localNotes]);
+  state.allNotes = uniqueSorted([...indexNotes, ...githubNotes, ...directoryNotes, ...localNotes]);
 
   if (!state.allNotes.length) {
     fileTree.innerHTML = `<p class="muted">No notes found in ${CONFIG.contentRoot}/.</p>`;

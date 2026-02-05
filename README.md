@@ -22,7 +22,7 @@ Add a markdown file under `contents/` (you can use folders).
 
 ## Deploy
 
-For note-only updates:
+Deploy all changes (notes, app code, styles, etc.):
 
 ```bash
 ./deploy.sh
@@ -32,10 +32,4 @@ Optional commit message:
 
 ```bash
 ./deploy.sh "Add new note"
-```
-
-If you changed app code too (`app.js`, `styles.css`, etc.), use:
-
-```bash
-git add -A && git commit -m "Update blog" && git push origin main
 ```

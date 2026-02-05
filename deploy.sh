@@ -10,6 +10,23 @@ if [ -d "contents" ]; then
   done < <(find contents -type d -empty)
 fi
 
+# Build note index so the UI can always reflect current structure.
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("contents")
+notes = []
+
+if root.exists():
+    for path in root.rglob("*"):
+        if path.is_file() and path.suffix.lower() in {".md", ".html", ".htm"}:
+            notes.append(path.as_posix())
+
+    notes.sort()
+    (root / ".notes-index.json").write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+PY
+
 git add -A
 
 if git diff --cached --quiet; then
